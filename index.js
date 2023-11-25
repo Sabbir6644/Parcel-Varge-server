@@ -253,24 +253,25 @@ async function run() {
         }
       });
       // get cart item
-      app.get('/cart/:email', async (req, res) => {
+      app.get('/parcelBook/:email', async (req, res) => {
         const userEmail = req.params.email;
         // console.log(userEmail);
         try{
           const query = { email: userEmail };
-          const result = await cartCollection.find(query).toArray();
+          const result = await parcelCollection.find(query).toArray();
           res.send(result)
         }catch (error) {
           console.error('Error:', error);
           res.status(500).send('Internal Server Error');
         }
-      })
+      });
   
-      app.delete('/cart/:id', async(req,res)=>{
+      app.delete('/user/cancelBooking/:id', async(req,res)=>{
         const id = req.params.id;
+        // console.log(id);
         try{
           const query = {_id: new ObjectId(id)}
-          const result = await cartCollection.deleteOne(query);
+          const result = await parcelCollection.deleteOne(query);
           res.send(result)
         }catch (error) {
           console.error('Error:', error);
