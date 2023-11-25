@@ -108,7 +108,7 @@ async function run() {
         res.status(500).json({ error: 'An error occurred while searching for food items.' });
       }
     });
-    
+
 
 
     // food get by name
@@ -199,31 +199,6 @@ async function run() {
         res.status(500).send({ error: 'Internal server error' });
       }
     });
-    // Update Food
-
-    app.put('/food/:id', async (req, res) => {
-      const id = req.params.id;
-      const food = req.body;
-      // console.log(product);
-      const filter = { _id: new ObjectId(id) }
-      const options = { upsert: true }
-      const updatedFood = {
-        //  { food_name, quantity, made_by, price, author_email, food_origin, food_category, description, food_image }
-        $set: {
-          food_name: food.food_name,
-          quantity: food.quantity,
-          made_by: food.made_by,
-          author_email: food.author_email,
-          price: food.price,
-          food_origin: food.food_origin,
-          food_category: food.food_category,
-          food_image: food.food_image,
-          description: food.description,
-        }
-      }
-      const result = await foodCollection.updateOne(filter, updatedFood, options);
-      res.send(result);
-    })
 
     // top selling food
     app.get('/topSellingFood', async (req, res) => {
@@ -241,46 +216,84 @@ async function run() {
     });
 
 
-      // add to cart 
-      app.post('/parcelBook', async (req, res) => {
-        const item = req.body;
-        try {
-          const result = await parcelCollection.insertOne(item);
-          res.send(result);
-        } catch (error) {
-          console.error('Error:', error);
-          res.status(500).send('Internal Server Error');
+    // add to cart 
+    app.post('/parcelBook', async (req, res) => {
+      const item = req.body;
+      try {
+        const result = await parcelCollection.insertOne(item);
+        res.send(result);
+      } catch (error) {
+        console.error('Error:', error);
+        res.status(500).send('Internal Server Error');
+      }
+    });
+    //  get parcel individual
+    app.get('/parcelBook/:email', async (req, res) => {
+      const userEmail = req.params.email;
+      const sortOptions = { _id: -1 };
+      // console.log(userEmail);
+      try {
+        const query = { email: userEmail };
+        const result = await parcelCollection.find(query).sort(sortOptions).toArray();
+        res.send(result)
+      } catch (error) {
+        console.error('Error:', error);
+        res.status(500).send('Internal Server Error');
+      }
+    });
+
+    // get parcel by id
+    app.get('/parcel/:id', async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) }
+      const result = await parcelCollection.findOne(query);
+      res.send(result)
+    })
+
+    app.put('/updateParcel/:id', async (req, res) => {
+      const id = req.params.id;
+      const myParcel = req.body;
+      // console.log(parcel);
+      const filter = { _id: new ObjectId(id) }
+      const options = { upsert: true }
+      const updatedParcel = {
+        $set: {
+          name: myParcel.name,
+          email: myParcel.email,
+          phoneNumber: myParcel.phoneNumber,
+          parcelType: myParcel.parcelType,
+          parcelWeight: myParcel.parcelWeight,
+          receiverName: myParcel.receiverName,
+          receiverPhoneNumber: myParcel.receiverPhoneNumber,
+          parcelDeliveryAddress: myParcel.parcelDeliveryAddress,
+          requestedDeliveryDate: myParcel.requestedDeliveryDate,
+          deliveryAddressLatitude: myParcel.deliveryAddressLatitude,
+          deliveryAddressLongitude: myParcel.deliveryAddressLongitude,
+          price: myParcel.price,
+          bookingDate: myParcel.bookingDate,
+          status: myParcel.status,
         }
-      });
-      // get cart item
-      app.get('/parcelBook/:email', async (req, res) => {
-        const userEmail = req.params.email;
-        // console.log(userEmail);
-        try{
-          const query = { email: userEmail };
-          const result = await parcelCollection.find(query).toArray();
-          res.send(result)
-        }catch (error) {
-          console.error('Error:', error);
-          res.status(500).send('Internal Server Error');
-        }
-      });
-  
-      app.delete('/user/cancelBooking/:id', async(req,res)=>{
-        const id = req.params.id;
-        // console.log(id);
-        try{
-          const query = {_id: new ObjectId(id)}
-          const result = await parcelCollection.deleteOne(query);
-          res.send(result)
-        }catch (error) {
-          console.error('Error:', error);
-          res.status(500).send('Internal Server Error');
-        }
-      })
-      // user related Apis
+      }
+      // console.log(updatedParcel);
+      const result = await parcelCollection.updateOne(filter, updatedParcel, options);
+      res.send(result);
+    })
+
+    app.delete('/cancelBooking/:id', async (req, res) => {
+      const id = req.params.id;
+      // console.log(id);
+      try {
+        const query = { _id: new ObjectId(id) }
+        const result = await parcelCollection.deleteOne(query);
+        res.send(result)
+      } catch (error) {
+        console.error('Error:', error);
+        res.status(500).send('Internal Server Error');
+      }
+    })
+    // user related Apis
     // store register user information
-    app.post('/regigter', async (req, res) => {
+    app.post('/register', async (req, res) => {
       try {
         const userInfo = req.body;
         const query = { email: userInfo.email };
@@ -300,9 +313,26 @@ async function run() {
 
     // Count user
     app.get('/userCount', async (req, res) => {
-      const count = await userCollection.estimatedDocumentCount();
-      res.send({ count })
-    })
+      try {
+        const count = await userCollection.estimatedDocumentCount();
+        res.send({ count });
+      } catch (error) {
+        console.error('Error:', error);
+        res.status(500).send('Internal Server Error');
+      }
+    });
+
+    // Parcel Count
+    app.get('/parcelsCount', async (req, res) => {
+      try {
+        const count = await parcelCollection.estimatedDocumentCount();
+        res.send({ count });
+      } catch (error) {
+        console.error('Error:', error);
+        res.status(500).send('Internal Server Error');
+      }
+    });
+
     //
     app.get('/user/:email', async (req, res) => {
       try {
@@ -323,11 +353,11 @@ async function run() {
     app.get('/cart/:email', async (req, res) => {
       const userEmail = req.params.email;
       // console.log(userEmail);
-      try{
+      try {
         const query = { email: userEmail };
         const result = await cartCollection.find(query).toArray();
         res.send(result)
-      }catch (error) {
+      } catch (error) {
         console.error('Error:', error);
         res.status(500).send('Internal Server Error');
       }
