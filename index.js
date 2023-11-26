@@ -222,20 +222,63 @@ async function run() {
         res.status(500).send({ message: 'Error occurred while fetching user' });
       }
     });
-    //get all user 
+
     app.get('/parcels', async (req, res) => {
+      const { fromDate, toDate } = req.query;
+      // console.log(fromDate, toDate);
+    
       try {
-        const result = await parcelCollection.find().toArray();
-
-        if (!result || result.length === 0) {
-          return res.status(404).send({ message: 'User not found' });
+        let query = {};
+    
+        // Apply date range filter if fromDate and toDate are provided
+        if (fromDate && toDate) {  
+          query = {
+            requestedDeliveryDate: {
+              $gte: fromDate,
+              $lte: toDate,
+            },
+          };
         }
-
+    
+        const result = await parcelCollection.find(query).toArray();
+    
+        if (!result || result.length === 0) {
+          return res.status(404).send({ message: 'Parcels not found' });
+        }
+    
         res.send(result);
       } catch (error) {
-        res.status(500).send({ message: 'Error occurred while fetching user' });
+        res.status(500).send({ message: 'Error occurred while fetching parcels' });
       }
     });
+    
+    
+    
+    
+
+    //Update parcel by id 
+    app.put('/parcel/:_id', async (req, res) => {
+      const id = req.params._id;
+      const { status, deliveryManId,approximateDeliveryDate } = req.body;
+    
+      try {
+        const query = { _id: new ObjectId(id) };
+        const update = {
+          $set: {
+            status: status, // Update the status field
+            deliveryManId: deliveryManId,
+            approximateDeliveryDate: approximateDeliveryDate,
+          }
+        };
+    
+        const result = await parcelCollection.updateOne(query, update);
+    
+        res.send(result)
+      } catch (error) {
+        res.status(500).send({ message: 'Error occurred while updating parcel' });
+      }
+    });
+    
 
     app.get('/aggregateDataByEmail', async (req, res) => {
       try {
