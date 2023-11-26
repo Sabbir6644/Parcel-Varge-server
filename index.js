@@ -224,20 +224,22 @@ async function run() {
     });
 
     app.get('/parcels', async (req, res) => {
-      const { fromDate, toDate } = req.query;
-      // console.log(fromDate, toDate);
+      const { fromDate, toDate, deliveryManId } = req.query;
     
       try {
         let query = {};
     
         // Apply date range filter if fromDate and toDate are provided
-        if (fromDate && toDate) {  
-          query = {
-            requestedDeliveryDate: {
-              $gte: fromDate,
-              $lte: toDate,
-            },
+        if (fromDate && toDate) {
+          query.requestedDeliveryDate = {
+            $gte: fromDate,
+            $lte: toDate,
           };
+        }
+    
+        // Add deliveryManId to the query if available
+        if (deliveryManId) {
+          query.deliveryManId = deliveryManId;
         }
     
         const result = await parcelCollection.find(query).toArray();
@@ -251,6 +253,7 @@ async function run() {
         res.status(500).send({ message: 'Error occurred while fetching parcels' });
       }
     });
+    
     
     
     
@@ -318,7 +321,7 @@ async function run() {
     
     // get deliveryMan
     app.get('/deliverymen', async (req, res) => {
-      try {
+      try { 
         const deliverymen = await userCollection.find({ userType: 'deliveryMen' }).toArray();
     
         if (!deliverymen || deliverymen.length === 0) {
