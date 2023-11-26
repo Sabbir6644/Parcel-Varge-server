@@ -56,7 +56,7 @@ async function run() {
     //  Auth related API
     app.post('/jwt', async (req, res) => {
       const user = req.body;
-      console.log(user);
+      // console.log(user);
       const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' })
       res
         .cookie('token', token, {
@@ -66,157 +66,7 @@ async function run() {
         })
         .send({ success: true })
     })
-    app.get('/allFoods', async (req, res) => {
-      const page = parseInt(req?.query.page)
-      const size = parseInt(req?.query.size)
-      const result = await foodCollection.find()
-        .skip(page * size)
-        .limit(size)
-        .toArray();
-      res.send(result);
-    })
-    // Pagination
-    app.get('/allFoodsCount', async (req, res) => {
-      const count = await foodCollection.estimatedDocumentCount();
-      res.send({ count })
-    })
 
-    // Pagination
-    // store order details
-    app.post('/order', async (req, res) => {
-      const order = req.body
-      const result = await orderCollection.insertOne(order);
-      res.send(result)
-    });
-    // caseInsensitive search
-
-    app.get('/search', async (req, res) => {
-      try {
-        const searchFood = req.query.food_name;
-        const matchingFoods = await foodCollection
-          .find({
-            $or: [
-              { food_name: { $regex: searchFood, $options: 'i' } }, // Case-insensitive exact match
-              { food_name: { $regex: searchFood.replace(/\s/g, '.*') } }, // Space-insensitive exact match
-              { food_name: { $regex: `.*${searchFood}.*`, $options: 'i' } } // Near-approximate match
-            ]
-          })
-          .toArray();
-        res.send(matchingFoods);
-      } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'An error occurred while searching for food items.' });
-      }
-    });
-
-
-
-    // food get by name
-    app.get('/foods', async (req, res) => {
-      let query = {};
-      if (req.query?.food_name) {
-        query = { food_name: req.query.food_name }
-      }
-      if (req.query?.email) {
-        query = { author_email: req.query.email }
-      }
-      const results = await foodCollection.find(query).toArray();
-      // console.log(results);
-      res.send(results);
-    });
-    app.get('/food/order', verifyToken, async (req, res) => {
-      let query = {};
-      if (req.query?.email) {
-        query = { buyerEmail: req.query.email }
-      }
-      if (req.query.email !== req.user.email) {
-        return res.status(403).send({ message: 'forbidden access' })
-      }
-      const results = await orderCollection.find(query).toArray();
-      // console.log(results);
-      res.send(results);
-    });
-
-
-    // single food by id
-    app.get('/singleFood/:id', async (req, res) => {
-      const id = req.params.id;
-      const query = { _id: new ObjectId(id) }
-      const result = await foodCollection.findOne(query);
-      res.send(result)
-    })
-    // new order
-    app.post('/createOrder', async (req, res) => {
-      const orderData = req.body;
-      try {
-        const query = { _id: new ObjectId(orderData.id) }
-        // Find the product in the products collection
-        const food = await foodCollection.findOne(query);
-
-        if (!food) {
-          return res.status(404).send({ error: 'Product not found' });
-        }
-        if (food?.author_email === orderData?.buyerEmail) {
-          return res.send({ error: 'You have added this product, so you can not buy this item' });
-        }
-        // Check if there is enough stock
-        if (food.quantity < orderData.quantity) {
-          return res.status(400).send({ error: 'Not enough stock available' });
-        }
-        // Calculate the new total sell value
-        const newTotalSell = food.totalSell ? food.totalSell + orderData.quantity : orderData.quantity;
-
-        // Create a new order
-        const order = {
-          foodName: orderData?.foodName,
-          quantity: orderData?.quantity,
-          buyerName: orderData?.buyerName,
-          price: orderData?.price,
-          buyerEmail: orderData?.buyerEmail,
-          buyingDate: orderData?.buyingDate,
-          food_image: orderData?.food_image,
-        };
-
-        // Save the order to the orders collection
-        const result = await orderCollection.insertOne(order);
-        console.log(result);
-        if (result.acknowledged) {
-          // Update the product quantity and total sell
-          await foodCollection.updateOne(
-            { _id: new ObjectId(orderData.id) },
-            {
-              $inc: { quantity: -orderData.quantity },
-              $set: { totalSell: newTotalSell }
-            }
-          );
-
-          res.send({ message: 'Order created successfully' });
-        } else {
-          res.status(500).send({ error: 'Failed to create order' });
-        }
-      } catch (error) {
-        console.error(error);
-        res.status(500).send({ error: 'Internal server error' });
-      }
-    });
-
-    // top selling food
-    app.get('/topSellingFood', async (req, res) => {
-      try {
-        const topSellingFood = await foodCollection.find()
-          .sort({ totalSell: -1 })
-          .limit(6)
-          .toArray();
-
-        res.send(topSellingFood);
-      } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Internal server error' });
-      }
-    });
-
-
-    // add to cart 
     app.post('/parcelBook', async (req, res) => {
       const item = req.body;
       try {
@@ -291,6 +141,29 @@ async function run() {
         res.status(500).send('Internal Server Error');
       }
     })
+    // update Stutus
+    app.patch('/updateParcelStatus/:id', async (req, res) => {
+      try {
+        const id = req.params.id;
+        const {status}  = req.body;
+        console.log(status);
+    
+        const filter = { _id: new ObjectId(id) };
+        const update = {
+          $set: {
+            userType: status, // Set userType to 'deliveryMen' when updating status
+          },
+        };
+    
+        const result = await userCollection.updateOne(filter, update);
+        res.send(result);
+      } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Internal server error' });
+      }
+    });
+    
+    
     // user related Apis
     // store register user information
     app.post('/register', async (req, res) => {
@@ -333,7 +206,7 @@ async function run() {
       }
     });
 
-    //
+    // get user by email
     app.get('/user/:email', async (req, res) => {
       try {
         const userEmail = req.params.email;
@@ -349,24 +222,89 @@ async function run() {
         res.status(500).send({ message: 'Error occurred while fetching user' });
       }
     });
-    // get user
-    app.get('/cart/:email', async (req, res) => {
-      const userEmail = req.params.email;
-      // console.log(userEmail);
+    //get all user 
+    app.get('/parcels', async (req, res) => {
       try {
-        const query = { email: userEmail };
-        const result = await cartCollection.find(query).toArray();
-        res.send(result)
+        const result = await parcelCollection.find().toArray();
+
+        if (!result || result.length === 0) {
+          return res.status(404).send({ message: 'User not found' });
+        }
+
+        res.send(result);
       } catch (error) {
-        console.error('Error:', error);
-        res.status(500).send('Internal Server Error');
+        res.status(500).send({ message: 'Error occurred while fetching user' });
       }
-    })
+    });
+
+    app.get('/aggregateDataByEmail', async (req, res) => {
+      try {
+        const aggregationResult = await userCollection.aggregate([
+          {
+            $lookup: {
+              from: 'parcelBooking',
+              localField: 'email', // Replace with the corresponding field in your user collection
+              foreignField: 'email', // Replace with the corresponding field in your parcel collection
+              as: 'parcels'
+            }
+          },
+          {
+            $group: {
+              _id: '$_id', // Replace with the field that uniquely identifies users (e.g., _id, email)
+              user: { $first: '$$ROOT' }, // Preserve the user information
+              phoneNumber: { $first: '$phoneNumber' }, // Assuming phoneNumber is in the user collection
+              numberOfParcelsBooked: { $sum: 1 }, // Count the number of parcels booked per user
+              totalSpentAmount: { $sum: '$parcels.price' } // Calculate the total spent amount
+            }
+          },
+          {
+            $replaceRoot: {
+              newRoot: {
+                $mergeObjects: ['$user', { numberOfParcelsBooked: '$numberOfParcelsBooked', totalSpentAmount: '$totalSpentAmount' }]
+              }
+            }
+          }
+        ]).toArray();
+    
+        res.send(aggregationResult);
+      } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Internal server error' });
+      }
+    });
+    
+    // get deliveryMan
+    app.get('/deliverymen', async (req, res) => {
+      try {
+        const deliverymen = await userCollection.find({ userType: 'deliveryMen' }).toArray();
+    
+        if (!deliverymen || deliverymen.length === 0) {
+          return res.status(404).send({ message: 'Deliverymen not found' });
+        }
+    
+        res.send(deliverymen);
+      } catch (error) {
+        res.status(500).send({ message: 'Error occurred while fetching deliverymen' });
+      }
+    });
+      
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+
+
 
     // remove token after logOut
     app.post('/logout', async (req, res) => {
       const user = req.body;
-      console.log(user);
+      // console.log(user);
       res.clearCookie('token', { maxAge: 0 }).send({ success: true })
     })
     // Send a ping to confirm a successful connection
