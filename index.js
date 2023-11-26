@@ -129,6 +129,31 @@ async function run() {
       res.send(result);
     })
 
+    // Give review 
+    app.put('/review/:id', async (req, res) => {
+      try {
+        const id = req.params.id;
+        const {review, feedback}  = req.body;
+        // console.log(review);
+    
+        const filter = { _id: new ObjectId(id) };
+        const options = { upsert: true }
+        const update = {
+          $set: {
+            review: review,
+            feedback: feedback 
+          },
+        };
+    
+        const result = await parcelCollection.updateOne(filter, update, options);
+        res.send(result);
+      } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Internal server error' });
+      }
+
+    })
+
     app.delete('/cancelBooking/:id', async (req, res) => {
       const id = req.params.id;
       // console.log(id);
@@ -146,16 +171,16 @@ async function run() {
       try {
         const id = req.params.id;
         const {status}  = req.body;
-        console.log(status);
+        // console.log(status);
     
         const filter = { _id: new ObjectId(id) };
         const update = {
           $set: {
-            userType: status, // Set userType to 'deliveryMen' when updating status
+            status: status, // change status
           },
         };
     
-        const result = await userCollection.updateOne(filter, update);
+        const result = await parcelCollection.updateOne(filter, update);
         res.send(result);
       } catch (error) {
         console.error(error);
