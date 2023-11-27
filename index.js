@@ -53,6 +53,7 @@ async function run() {
 
     const userCollection = client.db("parcelVerge").collection("user");
     const parcelCollection = client.db("parcelVerge").collection("parcelBooking");
+    const reviewCollection = client.db("parcelVerge").collection("reviews");
     //  Auth related API
     app.post('/jwt', async (req, res) => {
       const user = req.body;
@@ -130,29 +131,34 @@ async function run() {
     })
 
     // Give review 
-    app.put('/review/:id', async (req, res) => {
+    app.post('/review', async (req, res) => {
+      const review = req.body;
       try {
-        const id = req.params.id;
-        const {review, feedback}  = req.body;
-        // console.log(review);
-    
-        const filter = { _id: new ObjectId(id) };
-        const options = { upsert: true }
-        const update = {
-          $set: {
-            review: review,
-            feedback: feedback 
-          },
-        };
-    
-        const result = await parcelCollection.updateOne(filter, update, options);
+        const result = await reviewCollection.insertOne(review);
         res.send(result);
       } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Internal server error' });
+        console.error('Error:', error);
+        res.status(500).send('Internal Server Error');
       }
 
     })
+    //  get review
+    app.get('/review/:id', async (req, res) => {
+      try {
+        const id = req.params.id;
+        const query = { deliveryMenId: id };
+        const results = await reviewCollection.find(query).toArray();
+    
+        if (!results || results.length === 0) {
+          return res.status(404).send({ message: 'No reviews found for this deliveryMenId' });
+        }
+    
+        res.send(results);
+      } catch (error) {
+        res.status(500).send({ message: 'Error occurred while fetching reviews' });
+      }
+    });
+    
 
     app.delete('/cancelBooking/:id', async (req, res) => {
       const id = req.params.id;
@@ -279,7 +285,16 @@ async function run() {
       }
     });
     
-    
+    app.get('/parcel-counts', async (req, res) => {
+      try {
+        const totalParcelsCount = await parcelCollection.countDocuments();  //Delivered
+        const deliveredParcelsCount = await parcelCollection.countDocuments({ status: 'Delivered' });
+        
+        res.send({ totalParcels: totalParcelsCount, deliveredParcels: deliveredParcelsCount });
+      } catch (error) {
+        res.status(500).json({ message: 'Error occurred while fetching parcel counts' });
+      }
+    });
     
     
     
@@ -359,7 +374,52 @@ async function run() {
       }
     });
       
+    //get average review
+    app.get('/average-review/:deliverymenId', async (req, res) => {
+      const { deliverymenId } = req.params;
     
+      try {
+        const averageReview = await reviewCollection.aggregate([
+          { $match: { deliveryMenId: deliverymenId } }, // Match specific deliverymenId
+          {
+            $group: {
+              _id: "$deliveryMenId",
+              averageReview: { $avg: "$review" }
+            }
+          }
+        ]).toArray();
+    
+        res.status(200).json({ averageReview });
+      } catch (error) {
+        res.status(500).json({ message: 'Error occurred while fetching average review' });
+      }
+    });
+    
+     
+    app.get('/bookings-by-date', async (req, res) => {
+      try {
+        const bookingsByDate = await parcelCollection.aggregate([
+          {
+            $group: {
+              _id: {
+                $dateToString: {
+                  format: "%Y-%m-%d", // or any other desired format
+                  date: { $toDate: "$bookingDate" } // convert string to date
+                }
+              },
+              count: { $sum: 1 }
+            }
+          },
+          {
+            $sort: { _id: 1 } // Sort by date if needed
+          }
+        ]).toArray();
+    
+        res.status(200).json({ bookingsByDate });
+      } catch (error) {
+        res.status(500).json({ message: 'Error occurred while fetching bookings by date' });
+      }
+    });
     
     
     
