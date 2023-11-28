@@ -5,11 +5,12 @@ const cookieParser = require('cookie-parser');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 require('dotenv').config()
 const app = express();
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const port = process.env.PORT || 5000;
 
 //middleware
 app.use(cors({
-  origin: ['http://localhost:5173'],
+  origin: ['http://localhost:5173','https://prismatic-brigadeiros-ac03ba.netlify.app'],
   credentials: true
 }));
 // , 'http://localhost:5173'
@@ -67,10 +68,30 @@ async function run() {
         })
         .send({ success: true })
     })
+//  payment intent
+    app.post('/create-payment-intent', async(req,res)=>{
+      const {price} = req.body;
+        // console.log(price);
+      try{
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount: price,
+          currency: "usd",
+          payment_method_types: ['card']  
+        })
+        res.send({
+          clientSecret: paymentIntent.client_secret,
+        });
+    
+      } catch (error) {
+            res.status(500).send({ message: 'Error occurred' });
+          }
+    })
 
-    app.post('/parcelBook', async (req, res) => {
-      const item = req.body;
+    app.post('/user/parcel/Booking', async (req, res) => {
+      
       try {
+        const item = req.body;
+      // console.log(item);
         const result = await parcelCollection.insertOne(item);
         res.send(result);
       } catch (error) {
@@ -78,8 +99,13 @@ async function run() {
         res.status(500).send('Internal Server Error');
       }
     });
+    
+
+
+
+
     //  get parcel individual
-    app.get('/parcelBook/:email', async (req, res) => {
+    app.get('/parcelBook/:email', verifyToken, async (req, res) => {
       const userEmail = req.params.email;
       const sortOptions = { _id: -1 };
       // console.log(userEmail);
@@ -94,7 +120,7 @@ async function run() {
     });
 
     // get parcel by id
-    app.get('/parcel/:id', async (req, res) => {
+    app.get('/parcel/:id', verifyToken,async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) }
       const result = await parcelCollection.findOne(query);
@@ -104,7 +130,7 @@ async function run() {
     app.put('/updateParcel/:id', async (req, res) => {
       const id = req.params.id;
       const myParcel = req.body;
-      // console.log(parcel);
+      // console.log(myParcel);
       const filter = { _id: new ObjectId(id) }
       const options = { upsert: true }
       const updatedParcel = {
@@ -131,7 +157,7 @@ async function run() {
     })
 
     // Give review 
-    app.post('/review', async (req, res) => {
+    app.post('/review', verifyToken,async (req, res) => {
       const review = req.body;
       try {
         const result = await reviewCollection.insertOne(review);
@@ -143,7 +169,7 @@ async function run() {
 
     })
     //  get review
-    app.get('/review/:id', async (req, res) => {
+    app.get('/review/:id', verifyToken,async (req, res) => {
       try {
         const id = req.params.id;
         const query = { deliveryMenId: id };
@@ -160,7 +186,7 @@ async function run() {
     });
     
 
-    app.delete('/cancelBooking/:id', async (req, res) => {
+    app.delete('/cancelBooking/:id', verifyToken,async (req, res) => {
       const id = req.params.id;
       // console.log(id);
       try {
@@ -173,7 +199,7 @@ async function run() {
       }
     })
     // update Stutus
-    app.patch('/updateParcelStatus/:id', async (req, res) => {
+    app.patch('/updateParcelStatus/:id', verifyToken,async (req, res) => {
       try {
         const id = req.params.id;
         const {status}  = req.body;
@@ -238,12 +264,11 @@ async function run() {
     });
 
     // get user by email
-    app.get('/user/:email', async (req, res) => {
+    app.get('/user/:email',async (req, res) => {
       try {
         const userEmail = req.params.email;
         const query = { email: userEmail };
         const result = await userCollection.findOne(query);
-
         if (!result) {
           return res.status(404).send({ message: 'User not found' });
         }
@@ -254,7 +279,7 @@ async function run() {
       }
     });
 
-    app.get('/parcels', async (req, res) => {
+    app.get('/parcels', verifyToken,async (req, res) => {
       const { fromDate, toDate, deliveryManId } = req.query;
     
       try {
@@ -276,12 +301,12 @@ async function run() {
         const result = await parcelCollection.find(query).toArray();
     
         if (!result || result.length === 0) {
-          return res.status(404).send({ message: 'Parcels not found' });
+          return res.status(404).send({ message: 'Not found' });
         }
     
         res.send(result);
       } catch (error) {
-        res.status(500).send({ message: 'Error occurred while fetching parcels' });
+        res.status(500).send({ message: 'Error occurred' });
       }
     });
     
@@ -295,9 +320,7 @@ async function run() {
         res.status(500).json({ message: 'Error occurred while fetching parcel counts' });
       }
     });
-    
-    
-    
+     
 
     //Update parcel by id 
     app.put('/parcel/:_id', async (req, res) => {
@@ -323,24 +346,24 @@ async function run() {
     });
     
 
-    app.get('/aggregateDataByEmail', async (req, res) => {
+    app.get('/aggregateDataByEmail', verifyToken,async (req, res) => {
       try {
         const aggregationResult = await userCollection.aggregate([
           {
             $lookup: {
               from: 'parcelBooking',
-              localField: 'email', // Replace with the corresponding field in your user collection
-              foreignField: 'email', // Replace with the corresponding field in your parcel collection
+              localField: 'email', 
+              foreignField: 'email', 
               as: 'parcels'
             }
           },
           {
             $group: {
-              _id: '$_id', // Replace with the field that uniquely identifies users (e.g., _id, email)
-              user: { $first: '$$ROOT' }, // Preserve the user information
-              phoneNumber: { $first: '$phoneNumber' }, // Assuming phoneNumber is in the user collection
-              numberOfParcelsBooked: { $sum: 1 }, // Count the number of parcels booked per user
-              totalSpentAmount: { $sum: '$parcels.price' } // Calculate the total spent amount
+              _id: '$_id', 
+              user: { $first: '$$ROOT' }, 
+              phoneNumber: { $first: '$phoneNumber' }, 
+              numberOfParcelsBooked: { $sum: 1 }, 
+              totalSpentAmount: { $sum: '$parcels.price' } 
             }
           },
           {
@@ -359,23 +382,20 @@ async function run() {
       }
     });
     
-    // get deliveryMan
-    app.get('/deliverymen', async (req, res) => {
-      try { 
-        const deliverymen = await userCollection.find({ userType: 'deliveryMen' }).toArray();
-    
-        if (!deliverymen || deliverymen.length === 0) {
-          return res.status(404).send({ message: 'Deliverymen not found' });
-        }
-    
-        res.send(deliverymen);
-      } catch (error) {
-        res.status(500).send({ message: 'Error occurred while fetching deliverymen' });
-      }
-    });
+// get review
+app.get('/allReviews', async (req, res) => {
+  try {
+    const cursor = reviewCollection.find();
+    const result = await cursor.toArray();
+    res.send(result);
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).send('Internal Server Error');
+  }
+});
       
     //get average review
-    app.get('/average-review/:deliverymenId', async (req, res) => {
+    app.get('/average-review/:deliverymenId', verifyToken,async (req, res) => {
       const { deliverymenId } = req.params;
     
       try {
@@ -403,15 +423,15 @@ async function run() {
             $group: {
               _id: {
                 $dateToString: {
-                  format: "%Y-%m-%d", // or any other desired format
-                  date: { $toDate: "$bookingDate" } // convert string to date
+                  format: "%Y-%m-%d", 
+                  date: { $toDate: "$bookingDate" } 
                 }
               },
               count: { $sum: 1 }
             }
           },
           {
-            $sort: { _id: 1 } // Sort by date if needed
+            $sort: { _id: 1 } 
           }
         ]).toArray();
     
@@ -422,17 +442,74 @@ async function run() {
     });
     
     
+    app.get('/allDeliveryMen',verifyToken,async (req, res) => {
+      try {
+        const topDeliveryMen = await parcelCollection.aggregate([
+          { $group: { _id: '$deliveryManId', count: { $sum: 1 } } },
+          { $sort: { count: -1 } },
+          
+        ]).toArray();
+        const filteredDeliveryMen = topDeliveryMen.filter(deliveryMan => deliveryMan._id !== null).slice(0, 5);
+        const deliveryMenInfo = await Promise.all(
+          filteredDeliveryMen.map(async (deliveryMan) => {
+            const userInfo = await userCollection.findOne({ _id: new ObjectId(deliveryMan._id) });
+            const reviewsData = await reviewCollection.find({ deliveryMenId: deliveryMan._id }).toArray();
+            const averageReview = reviewsData.length > 0 ?
+              reviewsData.reduce((acc, curr) => acc + curr.review, 0) / reviewsData.length :
+              0;
     
+            return {
+              _id: userInfo?._id,
+              name: userInfo?.name,
+              phone:userInfo?.phoneNumber,
+              photo: userInfo?.imageUrl,
+              totalDelivery: deliveryMan.count,
+              averageReview
+            };
+          })
+        );
     
-    
-    
-    
-    
-    
+        res.send(deliveryMenInfo);
+      } catch (err) {
+        res.status(500).send({ message: err.message });
+      }
+    });
 
 
+    app.get('/topDeliveryMen', async (req, res) => {
+      try {
+        const topDeliveryMen = await parcelCollection.aggregate([
+          { $group: { _id: '$deliveryManId', count: { $sum: 1 } } },
+          { $sort: { count: -1 } },
+          
+        ]).toArray();
+        // console.log(topDeliveryMen);
+        const filteredDeliveryMen = topDeliveryMen.filter(deliveryMan => deliveryMan._id !== null).slice(0, 5);
+        const deliveryMenInfo = await Promise.all(
+          filteredDeliveryMen.map(async (deliveryMan) => {
+            const userInfo = await userCollection.findOne({ _id: new ObjectId(deliveryMan._id) });
+            const reviewsData = await reviewCollection.find({ deliveryMenId: deliveryMan._id }).toArray();
+            const averageReview = reviewsData.length > 0 ?
+              reviewsData.reduce((acc, curr) => acc + curr.review, 0) / reviewsData.length :
+              0;
+    
+            return {
+              name: userInfo?.name,
+              photo: userInfo?.imageUrl,
+              totalDelivery: deliveryMan.count,
+              averageReview
+            };
+          })
+        );
+    
+        res.send(deliveryMenInfo);
+      } catch (err) {
+        res.status(500).send({ message: err.message });
+      }
+    });
+    
 
-    // remove token after logOut
+    
     app.post('/logout', async (req, res) => {
       const user = req.body;
       // console.log(user);
