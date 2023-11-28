@@ -1,19 +1,20 @@
+
 const express = require('express');
+const mongoose = require('mongoose');
+const { MongoClient, ObjectId } = require('mongodb');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
-const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
-require('dotenv').config()
-const app = express();
-const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
-const port = process.env.PORT || 5000;
 
-//middleware
+require('dotenv').config();
+
+const app = express();
+const port = process.env.PORT || 5000;
 app.use(cors({
   origin: ['http://localhost:5173','https://prismatic-brigadeiros-ac03ba.netlify.app'],
   credentials: true
 }));
-// , 'http://localhost:5173'
+
 // customs middleware
 const verifyToken = async (req, res, next) => {
   const token = req.cookies?.token;
@@ -29,32 +30,42 @@ const verifyToken = async (req, res, next) => {
   })
 }
 
-
 app.use(express.json());
 app.use(cookieParser());
 
-// MongoDB
-
-// const uri = "mongodb://127.0.0.1:27017"
+// MongoDB connection setup using MongoClient
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.l5acpqm.mongodb.net/?retryWrites=true&w=majority`;
+const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true });
 
-// Create a MongoClient with a MongoClientOptions object to set the Stable API version
-const client = new MongoClient(uri, {
-  serverApi: {
-    version: ServerApiVersion.v1,
-    strict: true,
-    deprecationErrors: true,
+// Connect to MongoDB via MongoClient
+client.connect((err) => {
+  if (err) {
+    console.error('Connection error:', err);
+    return;
   }
+  console.log('Connected to MongoDB via MongoClient');
 });
 
-async function run() {
-  try {
-    // Connect the client to the server	(optional starting in v4.7)
-    // await client.connect();
+// Mongoose connection to MongoDB
+mongoose.connect(
+  `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.l5acpqm.mongodb.net/?retryWrites=true&w=majority/parcelVerge`,
+  { useNewUrlParser: true, useUnifiedTopology: true }
+)
+.then(() => {
+  console.log('Connected to MongoDB via Mongoose');
+})
+.catch((error) => {
+  console.error('Mongoose Connection error:', error);
+});
 
-    const userCollection = client.db("parcelVerge").collection("user");
-    const parcelCollection = client.db("parcelVerge").collection("parcelBooking");
-    const reviewCollection = client.db("parcelVerge").collection("reviews");
+// MongoDB collection reference using MongoClient
+
+const userCollection = client.db("parcelVerge").collection("user");
+const parcelCollection = client.db("parcelVerge").collection("parcelBooking");
+const reviewCollection = client.db("parcelVerge").collection("reviews");
+
+
+
     //  Auth related API
     app.post('/jwt', async (req, res) => {
       const user = req.body;
@@ -87,6 +98,8 @@ async function run() {
           }
     })
 
+
+// Express route without Mongoose schema
     app.post('/user/parcel/Booking', async (req, res) => {
       
       try {
@@ -100,9 +113,7 @@ async function run() {
       }
     });
     
-
-
-
+// mongoos
 
     //  get parcel individual
     app.get('/parcelBook/:email', verifyToken, async (req, res) => {
@@ -476,61 +487,46 @@ app.get('/allReviews', async (req, res) => {
     });
 
 
-    app.get('/topDeliveryMen', async (req, res) => {
-      try {
-        const topDeliveryMen = await parcelCollection.aggregate([
-          { $group: { _id: '$deliveryManId', count: { $sum: 1 } } },
-          { $sort: { count: -1 } },
-          
-        ]).toArray();
-        // console.log(topDeliveryMen);
-        const filteredDeliveryMen = topDeliveryMen.filter(deliveryMan => deliveryMan._id !== null).slice(0, 5);
-        const deliveryMenInfo = await Promise.all(
-          filteredDeliveryMen.map(async (deliveryMan) => {
-            const userInfo = await userCollection.findOne({ _id: new ObjectId(deliveryMan._id) });
-            const reviewsData = await reviewCollection.find({ deliveryMenId: deliveryMan._id }).toArray();
-            const averageReview = reviewsData.length > 0 ?
-              reviewsData.reduce((acc, curr) => acc + curr.review, 0) / reviewsData.length :
-              0;
-    
-            return {
-              name: userInfo?.name,
-              photo: userInfo?.imageUrl,
-              totalDelivery: deliveryMan.count,
-              averageReview
-            };
-          })
-        );
-    
-        res.send(deliveryMenInfo);
-      } catch (err) {
-        res.status(500).send({ message: err.message });
-      }
-    });
-    
-
-    
+    // app.get('/topDeliveryMen', async (req, res) => {
+      app.get('/topDeliveryMen', async (req, res) => {
+        try {
+          const topDeliveryMen = await parcelCollection.aggregate([
+            { $group: { _id: '$deliveryManId', count: { $sum: 1 } } },
+            { $sort: { count: -1 } },
+          ]).toArray();
+      
+          const filteredDeliveryMen = topDeliveryMen.filter(deliveryMan => deliveryMan._id !== null).slice(0, 5);
+      
+          const deliveryMenInfo = await Promise.all(
+            filteredDeliveryMen.map(async (deliveryMan) => {
+              const userInfo = await userCollection.findOne({ _id: new ObjectId(deliveryMan._id) });
+              const reviewsData = await reviewCollection.find({ deliveryMenId: deliveryMan._id }).toArray();
+              const averageReview = reviewsData.length > 0 ?
+                reviewsData.reduce((acc, curr) => acc + curr.review, 0) / reviewsData.length :
+                0;
+      
+              return {
+                name: userInfo?.name,
+                photo: userInfo?.imageUrl,
+                totalDelivery: deliveryMan.count,
+                averageReview,
+              };
+            })
+          );
+      
+          res.send(deliveryMenInfo);
+        } catch (err) {
+          res.status(500).send({ message: err.message });
+        }
+      });
+   
     app.post('/logout', async (req, res) => {
       const user = req.body;
       // console.log(user);
       res.clearCookie('token', { maxAge: 0 }).send({ success: true })
     })
-    // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log("Pinged your deployment. You successfully connected to MongoDB!");
-  } finally {
-    // Ensures that the client will close when you finish/error
-    //     await client.close();
-  }
-}
-run().catch(console.dir);
 
 
-
-
-app.get('/', (req, res) => {
-  res.send('parcelVerge server is running')
-})
 app.listen(port, () => {
-  console.log(`parcelVerge  server is running on port ${port}`);
-})
+  console.log(`Server is running on port ${port}`);
+});
