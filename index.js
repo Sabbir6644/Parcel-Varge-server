@@ -5,16 +5,18 @@ const { MongoClient, ObjectId } = require('mongodb');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
-
 require('dotenv').config();
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+
+
 
 const app = express();
 const port = process.env.PORT || 5000;
 app.use(cors({
-  origin: ['http://localhost:5173','https://prismatic-brigadeiros-ac03ba.netlify.app'],
+  origin: ['https://prismatic-brigadeiros-ac03ba.netlify.app'],
   credentials: true
 }));
-
+// 'http://localhost:5173'
 // customs middleware
 const verifyToken = async (req, res, next) => {
   const token = req.cookies?.token;
